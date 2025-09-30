@@ -16,7 +16,7 @@ import ani.saikou.parsers.anime.extractors.StreamSB
 class Gogo : AnimeParser() {
     override val name = "Gogo"
     override val saveName = "gogo_anime_hu"
-    override val hostUrl = "https://anitaku.to"
+    override val hostUrl = "https://anitaku.bz"
     override val malSyncBackupName = "Gogoanime"
     override val isDubAvailableSeparately = true
 

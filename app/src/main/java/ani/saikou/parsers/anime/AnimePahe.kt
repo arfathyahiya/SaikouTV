@@ -10,9 +10,9 @@ import kotlin.math.pow
 
 class AnimePahe : AnimeParser() {
 
-    override val hostUrl = "https://animepahe.ru"
+    override val hostUrl = "https://animepahe.si"
     override val name = "AnimePahe"
-    override val saveName = "animepahe_ru"
+    override val saveName = "animepahe_si"
     override val isDubAvailableSeparately = false
     private var cookieHeader = "Cookie" to "__ddg1_=;__ddg2_=;XSRF-TOKEN="
 
