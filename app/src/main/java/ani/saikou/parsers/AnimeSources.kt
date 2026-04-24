@@ -2,17 +2,17 @@ package ani.saikou.parsers
 
 import ani.saikou.Lazier
 import ani.saikou.lazyList
-import ani.saikou.parsers.anime.AllAnime
+//import ani.saikou.parsers.anime.AllAnime
 import ani.saikou.parsers.anime.AnimePahe
-import ani.saikou.parsers.anime.Gogo
+//import ani.saikou.parsers.anime.Gogo
 import ani.saikou.parsers.anime.Haho
 import ani.saikou.parsers.anime.HentaiFF
 import ani.saikou.parsers.anime.HentaiMama
 import ani.saikou.parsers.anime.HentaiStream
-import ani.saikou.parsers.anime.Marin
-import ani.saikou.parsers.anime.AniWave
-import ani.saikou.parsers.anime.AnimeDao
-import ani.saikou.parsers.anime.Kaido
+//import ani.saikou.parsers.anime.Marin
+//import ani.saikou.parsers.anime.AniWave
+//import ani.saikou.parsers.anime.AnimeDao
+//import ani.saikou.parsers.anime.Kaido
 
 object AnimeSources : WatchSources() {
     override val list: List<Lazier<BaseParser>> = lazyList(
@@ -20,7 +20,7 @@ object AnimeSources : WatchSources() {
 //        "AniWave" to ::AniWave,
 //        "AnimeDao" to ::AnimeDao,
         "AnimePahe" to ::AnimePahe,
-        "Gogo" to ::Gogo,
+//        "Gogo" to ::Gogo,
 //        "Kaido" to ::Kaido,
 //        "Marin" to ::Marin
     )
