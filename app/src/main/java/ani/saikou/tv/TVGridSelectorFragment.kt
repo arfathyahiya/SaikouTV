@@ -19,6 +19,7 @@ import ani.saikou.parsers.ShowResponse
 import ani.saikou.settings.UserInterfaceSettings
 import ani.saikou.tv.components.SearchFragment
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -30,10 +31,10 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
 
     val model: MediaDetailsViewModel by activityViewModels()
     var media: Media? = null
-    var currentQuery: String? = null
 
-    lateinit var adapter: ArrayObjectAdapter
+    private lateinit var adapter: ArrayObjectAdapter
     private val scope = requireActivity().lifecycleScope
+    private var searchJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,8 +74,8 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
     }
 
     fun search(query: String?) {
-        currentQuery = query
-        scope.launch {
+        searchJob?.cancel()
+        searchJob = scope.launch {
             delay(500)
             val currentMedia = media
             currentMedia ?: return@launch
@@ -110,6 +111,7 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
 
     override fun onDestroyView() {
         super.onDestroyView()
+        // Timer replaced with lifecycleScope delay — no cleanup needed
     }
 
     inner class AnimeSourcePresenter(private val activity: FragmentActivity) : Presenter() {
