@@ -36,7 +36,6 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
     var media: Media? = null
 
     private lateinit var adapter: ArrayObjectAdapter
-    private val scope = requireActivity().lifecycleScope
     private var searchJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,7 +75,7 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
 
     fun search(query: String?) {
         searchJob?.cancel()
-        searchJob = scope.launch {
+        searchJob = lifecycleScope.launch {
             delay(500)
             val currentMedia = media
             currentMedia ?: return@launch
