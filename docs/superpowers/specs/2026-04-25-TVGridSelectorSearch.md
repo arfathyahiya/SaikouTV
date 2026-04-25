@@ -13,10 +13,10 @@ Add a user-input search bar to TV mode's "Wrong title" correction flow, matching
 - TVGridSelectorFragment extends SearchFragment instead of VerticalGridSupportFragment
 - Implements SearchSupportFragment.SearchResultProvider
 - SearchFragment.onCreateView inflates tv_search_fragment.xml (already has SearchBar + VerticalGrid)
-- Pre-fill search bar with media.mangaName()
-- onQueryTextChange: debounced 500ms search with user's typed query
+- Start immediate search with media.mangaName() on load (Leanback SearchBar has no text field, only orb)
+- onQueryTextChange: debounced 500ms search with user's typed query via remote keyboard
 - onQueryTextSubmit: submit query
-- Item click: use current search query instead of media name for overrideEpisodes
+- Item click: use clicked ShowResponse for overrideEpisodes (unchanged from original)
 
 ## Files Changed
 - app/src/main/java/ani/saikou/tv/TVGridSelectorFragment.kt — rewrite to extend SearchFragment

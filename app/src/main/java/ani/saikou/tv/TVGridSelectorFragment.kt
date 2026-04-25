@@ -82,12 +82,14 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
             withContext(Dispatchers.Main) {
                 progressBarManager.show()
             }
-            model.responses.postValue(
-                withContext(Dispatchers.IO) {
-                    val source = (if (!currentMedia.isAdult) AnimeSources else HAnimeSources)[currentMedia.selected!!.source]
-                    source.search(query)
-                }
-            )
+            currentMedia.selected?.source?.let { sourceIdx ->
+                model.responses.postValue(
+                    withContext(Dispatchers.IO) {
+                        val source = (if (!currentMedia.isAdult) AnimeSources else HAnimeSources)[sourceIdx]
+                        tryWithSuspend { source.search(query) }
+                    }
+                )
+            }
         }
     }
 
