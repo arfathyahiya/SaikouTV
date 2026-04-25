@@ -1,9 +1,11 @@
 package ani.saikou.tv
 
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.fragment.app.FragmentActivity
 import androidx.fragment.app.activityViewModels
 import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.ObjectAdapter
@@ -11,6 +13,7 @@ import androidx.leanback.widget.Presenter
 import androidx.leanback.app.SearchSupportFragment
 import androidx.lifecycle.lifecycleScope
 import ani.saikou.*
+import ani.saikou.databinding.TvAnimeCardBinding
 import ani.saikou.media.Media
 import ani.saikou.media.MediaDetailsViewModel
 import ani.saikou.parsers.AnimeSources
@@ -42,9 +45,7 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        progressBarManager.setRootView(this.view as ViewGroup)
-        progressBarManager.initialDelay = 0
-        progressBarManager.show()
+        setLoadingVisibility(View.VISIBLE)
 
         adapter = ArrayObjectAdapter(AnimeSourcePresenter(requireActivity()))
         super.setSearchResultProvider(this)
@@ -68,7 +69,7 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
                 } else {
                     Toast.makeText(requireContext(), "Nothing found, try another source.", Toast.LENGTH_LONG).show()
                 }
-                progressBarManager.hide()
+                setLoadingVisibility(View.GONE)
             }
         }
     }
@@ -80,13 +81,14 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
             val currentMedia = media
             currentMedia ?: return@launch
             withContext(Dispatchers.Main) {
-                progressBarManager.show()
+                setLoadingVisibility(View.VISIBLE)
             }
             currentMedia.selected?.source?.let { sourceIdx ->
+                val searchQuery = query ?: currentMedia.mangaName()
                 model.responses.postValue(
                     withContext(Dispatchers.IO) {
                         val source = (if (!currentMedia.isAdult) AnimeSources else HAnimeSources)[sourceIdx]
-                        tryWithSuspend { source.search(query) }
+                        tryWithSuspend { source.search(searchQuery) }
                     }
                 )
             }
@@ -111,10 +113,7 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
         return true
     }
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        // Timer replaced with lifecycleScope delay — no cleanup needed
-    }
+    // Timer replaced with lifecycleScope delay — no cleanup needed
 
     inner class AnimeSourcePresenter(private val activity: FragmentActivity) : Presenter() {
 
@@ -155,6 +154,6 @@ class TVGridSelectorFragment : SearchFragment(), SearchSupportFragment.SearchRes
         override fun onUnbindViewHolder(viewHolder: ViewHolder?) {
         }
 
-        inner class AnimeSourceViewHolder(val binding: TvAnimeCardBinding) : Presenter.ViewHolder(binding.root) {}
+        inner class AnimeSourceViewHolder(val binding: TvAnimeCardBinding) : ViewHolder(binding.root) {}
     }
 }
