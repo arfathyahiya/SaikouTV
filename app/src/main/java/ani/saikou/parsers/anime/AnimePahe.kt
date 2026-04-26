@@ -88,25 +88,11 @@ class AnimePahe : AnimeParser() {
                 val href = button.attr("data-src")
                 if ("kwik" in href) {
                     servers.add(VideoServer(
-                        name = "AnimePahe $source [$type]",
+                        name = "AnimePahe $source [$quality] [$type]",
                         embedUrl = href,
                         extraData = mapOf("quality" to quality, "referer" to hostUrl, "type" to type)
                     ))
                 }
-            }
-
-            doc.select("div#pickDownload > a").forEach { link ->
-                val text = link.text()
-                val match = qualityRegex.find(text)
-                val source = match?.groupValues?.getOrNull(1) ?: "Unknown"
-                val quality = match?.groupValues?.getOrNull(2)?.substringBefore("p")?.toIntOrNull() ?: 480
-                val href = link.attr("href")
-                val type = if (link.select("span").text().contains("eng")) "DUB" else "SUB"
-                servers.add(VideoServer(
-                    name = "AnimePahe Pahe $source [$type]",
-                    embedUrl = href,
-                    extraData = mapOf("quality" to quality, "referer" to hostUrl, "type" to type)
-                ))
             }
 
             servers
