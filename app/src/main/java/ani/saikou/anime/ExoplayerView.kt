@@ -995,37 +995,45 @@ class ExoplayerView : AppCompatActivity(), Player.Listener {
         video = ext.videos.getOrNull(episode.selectedVideo) ?: return
 
         val subLang: String? = loadData("subLang_${media.id}", this)
-        if(subLang == null) {
-            subtitle = ext.subtitles.let { sub ->
-                when (episode.selectedSubtitle) {
-                    null -> null
-                    -1   -> sub.find { it.language == "English" || it.language == "en-US" }
-                    else -> sub.getOrNull(episode.selectedSubtitle!!)
-                }
-            }
+        val newSub = intent.getSerialized<Subtitle>("subtitle")
+
+        fun languageAlias(lang: String?): String? = when (lang) {
+            "ja-JP"  -> "Japanese"
+            "en-US"  -> "English"
+            "de-DE"  -> "German"
+            "es-ES"  -> "Spanish"
+            "es-419" -> "Spanish"
+            "fr-FR"  -> "French"
+            "it-IT"  -> "Italian"
+            "pt-BR"  -> "Portuguese (Brazil)"
+            "pt-PT"  -> "Portuguese (Portugal)"
+            "ru-RU"  -> "Russian"
+            "zh-CN"  -> "Chinese"
+            "tr-TR"  -> "Turkish"
+            "ar-ME"  -> "Arabic"
+            else     -> null
         }
-        if(subLang == "none") {
-            subtitle = ext.subtitles.let { null }
-        } else {
-            subtitle = ext.subtitles.let { sub ->
-                sub.find { it.language == subLang || it.language == when(subLang){
-                    "ja-JP"  -> "Japanese"
-                    "en-US"  -> "English"
-                    "de-DE"  -> "German"
-                    "es-ES"  -> "Spanish"
-                    "es-419" -> "Spanish"
-                    "fr-FR"  -> "French"
-                    "it-IT"  -> "Italian"
-                    "pt-BR"  -> "Portuguese (Brazil)"
-                    "pt-PT"  -> "Portuguese (Portugal)"
-                    "ru-RU"  -> "Russian"
-                    "zh-CN"  -> "Chinese"
-                    "tr-TR"  -> "Turkish"
-                    "ar-ME"  -> "Arabic"
-                    else     -> "English"
-                    }
-                }
+
+        fun isEnglishSub(sub: Subtitle): Boolean {
+            val lang = sub.language.trim()
+            return lang.equals("English", true) ||
+                    lang.equals("en-US", true) ||
+                    lang.equals("eng", true) ||
+                    lang.equals("en", true)
+        }
+
+        subtitle = when {
+            newSub != null -> newSub
+            subLang == "none" -> null
+            subLang != null -> ext.subtitles.find { sub ->
+                sub.language.equals(subLang, true) ||
+                        languageAlias(subLang)?.let { sub.language.equals(it, true) } == true
             }
+            episode.selectedSubtitle != null -> when (episode.selectedSubtitle) {
+                -1   -> ext.subtitles.find(::isEnglishSub) ?: ext.subtitles.firstOrNull()
+                else -> ext.subtitles.getOrNull(episode.selectedSubtitle!!)
+            }
+            else -> ext.subtitles.find(::isEnglishSub) ?: ext.subtitles.firstOrNull()
         }
 
         //Subtitles
@@ -1034,33 +1042,24 @@ class ExoplayerView : AppCompatActivity(), Player.Listener {
             subClick()
         }
 
-        val newSub = intent.getSerialized<Subtitle>("subtitle")
-        var sub: MediaItem.SubtitleConfiguration? = null
-        if(newSub == null && subtitle != null) {
-            sub = MediaItem.SubtitleConfiguration
-                    .Builder(Uri.parse(subtitle!!.url.url))
-                    .setSelectionFlags(C.SELECTION_FLAG_FORCED)
-                    .setMimeType(
-                        when (subtitle?.type) {
-                            SubtitleType.VTT -> MimeTypes.TEXT_VTT
-                            SubtitleType.ASS -> MimeTypes.TEXT_SSA
-                            SubtitleType.SRT -> MimeTypes.APPLICATION_SUBRIP
-                            else             -> MimeTypes.TEXT_UNKNOWN
-                        }
-                    )
-                    .build()
-        }
-        if(newSub != null){
-            sub = MediaItem.SubtitleConfiguration
-                    .Builder(Uri.parse(newSub.url.url))
-                    .setSelectionFlags(C.SELECTION_FLAG_FORCED)
-                    .setMimeType(when (newSub.type) {
-                        SubtitleType.VTT -> MimeTypes.TEXT_VTT
-                        SubtitleType.ASS -> MimeTypes.TEXT_SSA
-                        SubtitleType.SRT -> MimeTypes.APPLICATION_SUBRIP
-                        }
-                    )
-                    .build()
+        val sub: MediaItem.SubtitleConfiguration? = subtitle?.let { selectedSub ->
+            val detectedMimeType = when (selectedSub.type) {
+                SubtitleType.VTT -> MimeTypes.TEXT_VTT
+                SubtitleType.ASS -> MimeTypes.TEXT_SSA
+                SubtitleType.SRT -> MimeTypes.APPLICATION_SUBRIP
+                else -> when {
+                    selectedSub.url.url.endsWith(".vtt", ignoreCase = true) -> MimeTypes.TEXT_VTT
+                    selectedSub.url.url.endsWith(".ass", ignoreCase = true) -> MimeTypes.TEXT_SSA
+                    selectedSub.url.url.endsWith(".srt", ignoreCase = true) -> MimeTypes.APPLICATION_SUBRIP
+                    else -> MimeTypes.TEXT_VTT
+                }
+            }
+
+            MediaItem.SubtitleConfiguration.Builder(Uri.parse(selectedSub.url.url))
+                .setMimeType(detectedMimeType)
+                .setLanguage(selectedSub.language)
+                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                .build()
         }
 
         lifecycleScope.launch(Dispatchers.IO) {
@@ -1086,6 +1085,15 @@ class ExoplayerView : AppCompatActivity(), Player.Listener {
             defaultHeaders.forEach {
                 dataSource.setRequestProperty(it.key, it.value)
             }
+
+            subtitle?.url?.headers?.forEach {
+                dataSource.setRequestProperty(it.key, it.value)
+            }
+
+            newSub?.url?.headers?.forEach {
+                dataSource.setRequestProperty(it.key, it.value)
+            }
+
             video?.url?.headers?.forEach {
                 dataSource.setRequestProperty(it.key, it.value)
             }

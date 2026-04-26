@@ -9,6 +9,8 @@ import ani.saikou.parsers.anime.Haho
 import ani.saikou.parsers.anime.HentaiFF
 import ani.saikou.parsers.anime.HentaiMama
 import ani.saikou.parsers.anime.HentaiStream
+import ani.saikou.parsers.anime.KickAssAnime
+
 //import ani.saikou.parsers.anime.Marin
 //import ani.saikou.parsers.anime.AniWave
 //import ani.saikou.parsers.anime.AnimeDao
@@ -20,6 +22,7 @@ object AnimeSources : WatchSources() {
 //        "AniWave" to ::AniWave,
 //        "AnimeDao" to ::AnimeDao,
         "AnimePahe" to ::AnimePahe,
+        "KickAssAnime" to ::KickAssAnime,
 //        "Gogo" to ::Gogo,
 //        "Kaido" to ::Kaido,
 //        "Marin" to ::Marin

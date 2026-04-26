@@ -5,12 +5,16 @@ import android.app.Dialog
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.net.Uri
 import android.os.Bundle
 import android.support.v4.media.session.MediaSessionCompat
 import android.util.DisplayMetrics
 import android.view.*
+import android.widget.FrameLayout
+import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
+import androidx.core.view.setPadding
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
@@ -29,8 +33,10 @@ import ani.saikou.anime.VideoCache
 import ani.saikou.media.Media
 import ani.saikou.media.MediaDetailsViewModel
 import ani.saikou.parsers.Subtitle
+import ani.saikou.parsers.SubtitleType
 import ani.saikou.parsers.Video
 import ani.saikou.parsers.VideoExtractor
+import ani.saikou.parsers.VideoType
 import ani.saikou.settings.PlayerSettings
 import ani.saikou.settings.UserInterfaceSettings
 import ani.saikou.tv.utils.VideoPlayerGlue
@@ -40,12 +46,14 @@ import com.google.android.exoplayer2.ext.leanback.LeanbackPlayerAdapter
 import com.google.android.exoplayer2.ext.mediasession.MediaSessionConnector
 import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource
 import com.google.android.exoplayer2.source.DefaultMediaSourceFactory
+import com.google.android.exoplayer2.text.Cue
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector
 import com.google.android.exoplayer2.trackselection.MappingTrackSelector
 import com.google.android.exoplayer2.ui.TrackSelectionDialogBuilder
 import com.google.android.exoplayer2.upstream.DataSource
 import com.google.android.exoplayer2.upstream.HttpDataSource
 import com.google.android.exoplayer2.upstream.cache.CacheDataSource
+import com.google.android.exoplayer2.util.MimeTypes
 import com.google.android.exoplayer2.video.VideoSize
 import com.google.firebase.crashlytics.ktx.crashlytics
 import com.google.firebase.ktx.Firebase
@@ -100,7 +108,34 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
     private var uiSettings = UserInterfaceSettings()
 
     private var linkSelector: TVSelectorFragment? = null
+    private var tvSubtitleView: TextView? = null
 
+
+    private fun setupTvSubtitleOverlay() {
+        if (tvSubtitleView != null) return
+
+        val root = view as? ViewGroup ?: return
+
+        tvSubtitleView = TextView(requireContext()).apply {
+            text = ""
+            textSize = 26f
+            setTextColor(Color.WHITE)
+            setShadowLayer(4f, 2f, 2f, Color.BLACK)
+            gravity = Gravity.CENTER
+            setPadding(32)
+            visibility = View.GONE
+        }
+
+        val params = FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+            bottomMargin = 90
+        }
+
+        root.addView(tvSubtitleView, params)
+    }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
 
@@ -144,7 +179,12 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
 
                     extractor = episode.extractors?.find { it.server.name == episode.selectedExtractor }
                     video = extractor?.videos?.getOrNull(episode.selectedVideo)
-                    subtitle = extractor?.subtitles?.find { it.language == "English" }
+                    subtitle = extractor?.subtitles?.find {
+                        it.language.equals("English", true) ||
+                                it.language.equals("en-US", true) ||
+                                it.language.equals("eng", true) ||
+                                it.language.equals("en", true)
+                    } ?: extractor?.subtitles?.firstOrNull()
 
                     lifecycleScope.launch(Dispatchers.IO){
                         extractor?.onVideoPlayed(video)
@@ -166,7 +206,6 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
                             episodeArr = episodes.keys.toList()
                             currentEpisodeIndex = episodeArr.indexOf(media.anime!!.selectedEpisode!!)
                             playbackPosition = loadData("${media.id}_${it.number}", requireActivity()) ?: 0
-                            mediaItem = MediaItem.Builder().setUri(video?.url?.url).build()
                             if (playbackPosition != 0L) {
                                 showContinuePlaying()
                             } else {
@@ -242,6 +281,7 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
     }
 
     fun initVideo() {
+        setupTvSubtitleOverlay()
         val simpleCache = VideoCache.getInstance(requireContext())
 
         originalAspectRatio = null
@@ -254,6 +294,11 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
             defaultHeaders.forEach {
                 dataSource.setRequestProperty(it.key, it.value)
             }
+
+            subtitle?.url?.headers?.forEach {
+                dataSource.setRequestProperty(it.key, it.value)
+            }
+
             video?.url?.headers?.forEach {
                 dataSource.setRequestProperty(it.key, it.value)
             }
@@ -264,6 +309,12 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
             setUpstreamDataSourceFactory(dataSourceFactory)
         }
         trackSelector = DefaultTrackSelector(requireContext())
+        trackSelector.setParameters(
+            trackSelector.buildUponParameters()
+                .setPreferredTextLanguage("en")
+                .setSelectUndeterminedTextLanguage(true)
+                .setRendererDisabled(C.TRACK_TYPE_TEXT, false)
+        )
         trackSelector.setParameters(
             trackSelector.buildUponParameters()
                 .setMinVideoSize(
@@ -279,6 +330,42 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
         var curSpeed   = loadData("${media.id}_speed",requireActivity()) ?:settings.defaultSpeed
 
         playbackParameters = PlaybackParameters(speeds[curSpeed])
+
+        val mimeType = when (video?.format) {
+            VideoType.M3U8 -> MimeTypes.APPLICATION_M3U8
+            VideoType.DASH -> MimeTypes.APPLICATION_MPD
+            else -> MimeTypes.APPLICATION_MP4
+        }
+
+        val subConfig = subtitle?.let { selectedSub ->
+            val subMimeType = when (selectedSub.type) {
+                SubtitleType.VTT -> MimeTypes.TEXT_VTT
+                SubtitleType.ASS -> MimeTypes.TEXT_SSA
+                SubtitleType.SRT -> MimeTypes.APPLICATION_SUBRIP
+                else -> when {
+                    selectedSub.url.url.endsWith(".vtt", true) -> MimeTypes.TEXT_VTT
+                    selectedSub.url.url.endsWith(".ass", true) -> MimeTypes.TEXT_SSA
+                    selectedSub.url.url.endsWith(".srt", true) -> MimeTypes.APPLICATION_SUBRIP
+                    else -> MimeTypes.TEXT_VTT
+                }
+            }
+
+            MediaItem.SubtitleConfiguration.Builder(Uri.parse(selectedSub.url.url))
+                .setMimeType(subMimeType)
+                .setLanguage(selectedSub.language)
+                .setSelectionFlags(C.SELECTION_FLAG_DEFAULT)
+                .build()
+        }
+
+        val builder = MediaItem.Builder()
+            .setUri(video!!.url.url)
+            .setMimeType(mimeType)
+
+        if (subConfig != null) {
+            builder.setSubtitleConfigurations(listOf(subConfig))
+        }
+
+        mediaItem = builder.build()
 
         exoPlayer = ExoPlayer.Builder(requireContext())
             .setMediaSourceFactory(DefaultMediaSourceFactory(cacheFactory))
@@ -296,6 +383,14 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
 
         isInitialized = true
         exoPlayer.addListener(this)
+        exoPlayer.addListener(object : Player.Listener {
+            override fun onCues(cues: MutableList<Cue>) {
+                val text = cues.joinToString("\n") { it.text?.toString().orEmpty() }.trim()
+
+                tvSubtitleView?.text = text
+                tvSubtitleView?.visibility = if (text.isNotEmpty()) View.VISIBLE else View.GONE
+            }
+        })
         val mediaButtonReceiver = ComponentName(requireActivity(), MediaButtonReceiver::class.java)
         MediaSessionCompat(requireContext(), "Player", mediaButtonReceiver, null).let { media ->
             mediaSession = media
