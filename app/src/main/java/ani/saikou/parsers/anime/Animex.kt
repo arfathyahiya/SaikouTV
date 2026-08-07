@@ -7,6 +7,8 @@ import ani.saikou.parsers.AnimeParser
 import ani.saikou.parsers.Episode
 import ani.saikou.parsers.ShowResponse
 import ani.saikou.parsers.Subtitle
+import com.lagradost.nicehttp.NiceResponse
+import kotlinx.coroutines.delay
 import ani.saikou.parsers.Video
 import ani.saikou.parsers.VideoContainer
 import ani.saikou.parsers.VideoExtractor
@@ -33,6 +35,43 @@ class Animex : AnimeParser() {
         const val ORIGIN = "https://animex.one"
         const val BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
         const val REFERER = "https://animex.one/"
+
+        // The _amx_id cookie is bound to the Browser UA + the requester IP.
+        // We capture it from the first pp.animex.one response and replay it on every
+        // later call so the API doesn't keep treating us as a fresh anonymous client
+        // (which is what trips the 429/403 bot filter). Shared by Animex + AnimexExtractor.
+        @Volatile
+        var amxIdCookie: String? = null
+            private set
+
+        // Merge our static headers with the latest captured cookie (injected + guaranteed UA match).
+        fun animexHeaders(): Map<String, String> {
+            val h = headers.toMutableMap()
+            val cookie = amxIdCookie
+            if (cookie != null) h["Cookie"] = "_amx_id=$cookie"
+            return h
+        }
+
+        // Capture _amx_id from any pp.animex.one response (including 403/429 ones).
+        fun captureCookie(res: NiceResponse) {
+            res.cookies["_amx_id"]?.let { amxIdCookie = it }
+        }
+
+        // GET with _amx_id replay + a couple of retries on the 429/retry-after throttle.
+        suspend fun getAnimex(url: String): NiceResponse {
+            var res = client.get(url, headers = animexHeaders())
+            captureCookie(res)
+
+            var attempts = 0
+            while (res.code == 429 && attempts < 3) {
+                val retryAfter = res.headers["retry-after"]?.toLongOrNull() ?: 3L
+                delay(retryAfter * 1000L)
+                res = client.get(url, headers = animexHeaders())
+                captureCookie(res)
+                attempts++
+            }
+            return res
+        }
 
         val headers = mapOf(
             "User-Agent" to BROWSER_UA,
@@ -197,10 +236,7 @@ class Animex : AnimeParser() {
     override suspend fun loadEpisodes(animeLink: String, extra: Map<String, String>?): List<Episode> {
         val anilistId = extra?.get("anilistId") ?: return emptyList()
         val episodes = tryWithSuspend {
-            client.get(
-                "$API_HOST/episodes?id=$anilistId",
-                headers = headers,
-            ).text.let { parseIfNotError(it) }
+            getAnimex("$API_HOST/episodes?id=$anilistId").text.let { parseIfNotError(it) }
         }.orEmpty()
         return episodes.map { ep ->
             Episode(
@@ -223,10 +259,7 @@ class Animex : AnimeParser() {
     override suspend fun loadVideoServers(episodeLink: String, extra: Any?): List<VideoServer> {
         val animexExtra = (extra as? AnimexExtra) ?: return emptyList()
         val serversRes = tryWithSuspend {
-            client.get(
-                "$API_HOST/servers?id=${animexExtra.anilistId}&epNum=${animexExtra.episodeNumber}",
-                headers = headers,
-            ).parsed<ServersResponse>()
+            getAnimex("$API_HOST/servers?id=${animexExtra.anilistId}&epNum=${animexExtra.episodeNumber}").parsed<ServersResponse>()
         } ?: return emptyList()
 
         val allProviders = (if (animexExtra.hasSub) serversRes.subProviders else emptyList()) +
@@ -257,7 +290,6 @@ class Animex : AnimeParser() {
 class AnimexExtractor(override val server: VideoServer) : VideoExtractor() {
     private companion object {
         const val API_HOST = "https://pp.animex.one/rest/api"
-        val headers = Animex.headers
     }
 
     override suspend fun extract(): VideoContainer {
@@ -266,9 +298,8 @@ class AnimexExtractor(override val server: VideoServer) : VideoExtractor() {
         val providerId = extra.providerId ?: "uwu"
 
         val sourcesRes = tryWithSuspend {
-            client.get(
-                "$API_HOST/sources?id=${extra.anilistId}&epNum=${extra.episodeNumber}&type=$typeParam&providerId=$providerId",
-                headers = headers,
+            Animex.getAnimex(
+                "$API_HOST/sources?id=${extra.anilistId}&epNum=${extra.episodeNumber}&type=$typeParam&providerId=$providerId"
             ).parsed<Animex.SourcesResponse>()
         } ?: return VideoContainer(emptyList(), emptyList())
 
