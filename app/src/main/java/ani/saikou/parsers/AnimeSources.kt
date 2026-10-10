@@ -17,6 +17,7 @@ import ani.saikou.parsers.anime.KickAssAnime
 //import ani.saikou.parsers.anime.Kaido
 import ani.saikou.parsers.anime.Miruro
 import ani.saikou.parsers.anime.Animex
+import ani.saikou.parsers.anime.Anichi
 
 object AnimeSources : WatchSources() {
     override val list: List<Lazier<BaseParser>> = lazyList(
@@ -24,6 +25,7 @@ object AnimeSources : WatchSources() {
 //        "AniWave" to ::AniWave,
 //        "AnimeDao" to ::AnimeDao,
 //        "Miruro" to ::Miruro,
+        "Anichi" to ::Anichi,
         "AnimeX" to ::Animex,
 //        "AnimePahe" to ::AnimePahe,
         "KickAssAnime" to ::KickAssAnime,
