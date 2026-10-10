@@ -77,6 +77,7 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
     private lateinit var exoPlayer: ExoPlayer
     private lateinit var cacheFactory : CacheDataSource.Factory
     private lateinit var playbackParameters: PlaybackParameters
+    private var currentSpeedIndex: Int = PlayerSettings.CURSED_SPEEDS.indexOf(1f)
     private lateinit var trackSelector: DefaultTrackSelector
     private lateinit var mediaItem : MediaItem
     private var interacted = false
@@ -325,11 +326,7 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
 
 
         //Speed
-        val speeds     =  if(settings.cursedSpeeds) arrayOf(1f , 1.25f , 1.5f , 1.75f , 2f , 2.5f , 3f , 4f, 5f , 10f , 25f, 50f) else arrayOf( 0.25f , 0.33f , 0.5f , 0.66f , 0.75f , 1f , 1.25f , 1.33f , 1.5f , 1.66f , 1.75f , 2f )
-        val speedsName = speeds.map { "${it}x" }.toTypedArray()
-        var curSpeed   = loadData("${media.id}_speed",requireActivity()) ?:settings.defaultSpeed
-
-        playbackParameters = PlaybackParameters(speeds[curSpeed])
+        playbackParameters = PlaybackParameters(PlayerSettings.CURSED_SPEEDS[currentSpeedIndex])
 
         val mimeType = when (video?.format) {
             VideoType.M3U8 -> MimeTypes.APPLICATION_M3U8
@@ -409,7 +406,13 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
             }
         })
 
-        playerGlue = VideoPlayerGlue(requireActivity(), LeanbackPlayerAdapter(requireActivity(), exoPlayer, 16), true,this)
+        playerGlue = VideoPlayerGlue(
+            requireActivity(),
+            LeanbackPlayerAdapter(requireActivity(), exoPlayer, 16),
+            true,
+            this,
+            PlayerSettings.CURSED_SPEED_LABELS[currentSpeedIndex]
+        )
         playerGlue.host = VideoSupportFragmentGlueHost(this)
         playerGlue.title = media.mainName()
 
@@ -483,6 +486,24 @@ class TVMediaPlayer: VideoSupportFragment(), VideoPlayerGlue.OnActionClickedList
     override fun onQuality() {
         if(playerGlue.shouldShowQualityAction)
             initPopupQuality().show()
+    }
+
+    override fun onSpeed() {
+        val speeds = PlayerSettings.CURSED_SPEEDS
+        val labels = PlayerSettings.CURSED_SPEED_LABELS
+        AlertDialog.Builder(requireContext(), R.style.TVDialogTheme)
+            .setTitle("Playback speed")
+            .setSingleChoiceItems(labels, currentSpeedIndex) { dialog, selectedIndex ->
+                if (isInitialized && selectedIndex in speeds.indices) {
+                    currentSpeedIndex = selectedIndex
+                    playbackParameters = PlaybackParameters(speeds[currentSpeedIndex])
+                    exoPlayer.playbackParameters = playbackParameters
+                    playerGlue.updateSpeedLabel(labels[currentSpeedIndex])
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     override fun onPrevious() {

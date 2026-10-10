@@ -1,5 +1,8 @@
 package ani.saikou.settings
 
+import android.content.Context
+import ani.saikou.loadData
+import ani.saikou.saveData
 import java.io.Serializable
 
 data class PlayerSettings(
@@ -46,4 +49,25 @@ data class PlayerSettings(
     //Other
     var cast: Boolean = false,
     var pip: Boolean = true
-) : Serializable
+) : Serializable {
+    companion object {
+        val CURSED_SPEEDS = arrayOf(
+            0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f, 3f
+        )
+        val CURSED_SPEED_LABELS = arrayOf(
+            "0.25x", "0.5x", "0.75x", "1x", "1.25x", "1.5x", "1.75x", "2x", "3x"
+        )
+    }
+}
+
+private const val CURSED_SPEED_LIST_VERSION_KEY = "cursed_speed_list_version"
+private const val CURRENT_CURSED_SPEED_LIST_VERSION = 1
+
+fun PlayerSettings.migrateCursedSpeedList(context: Context): Boolean {
+    val storedVersion = loadData<Int>(CURSED_SPEED_LIST_VERSION_KEY, context, toast = false) ?: 0
+    if (storedVersion >= CURRENT_CURSED_SPEED_LIST_VERSION) return false
+
+    if (cursedSpeeds) defaultSpeed = PlayerSettings.CURSED_SPEEDS.indexOf(1f)
+    saveData(CURSED_SPEED_LIST_VERSION_KEY, CURRENT_CURSED_SPEED_LIST_VERSION, context)
+    return true
+}

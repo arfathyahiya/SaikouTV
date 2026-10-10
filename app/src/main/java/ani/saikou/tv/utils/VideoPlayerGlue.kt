@@ -2,6 +2,13 @@ package ani.saikou.tv.utils
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.drawable.Drawable
+import android.text.TextPaint
 import android.view.KeyEvent
 import androidx.leanback.media.PlaybackTransportControlGlue
 import androidx.leanback.widget.Action
@@ -12,6 +19,64 @@ import androidx.leanback.widget.PlaybackControlsRowPresenter
 import ani.saikou.R
 import com.google.android.exoplayer2.ext.leanback.LeanbackPlayerAdapter
 import java.util.concurrent.*
+
+private class SpeedLabelDrawable(context: Context, initialLabel: String) : Drawable() {
+    private val density = context.resources.displayMetrics.density
+    private val textPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textSize = 24f * density
+        typeface = android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL)
+        textAlign = Paint.Align.CENTER
+    }
+    private var label = initialLabel
+
+    fun setLabel(value: String) {
+        label = value
+        invalidateSelf()
+    }
+
+    override fun draw(canvas: Canvas) {
+        val bounds = bounds
+        val maxTextHeight = bounds.height() * 0.82f
+        val maxTextWidth = bounds.width() * 0.94f
+        textPaint.textSize = maxTextHeight
+        val measuredWidth = textPaint.measureText(label)
+        if (measuredWidth > maxTextWidth && measuredWidth > 0f) {
+            textPaint.textSize *= maxTextWidth / measuredWidth
+        }
+        val x = bounds.exactCenterX()
+        val y = bounds.exactCenterY() - (textPaint.ascent() + textPaint.descent()) / 2f
+        canvas.drawText(label, x, y, textPaint)
+    }
+
+    override fun setAlpha(alpha: Int) {
+        textPaint.alpha = alpha
+        invalidateSelf()
+    }
+
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        textPaint.colorFilter = colorFilter
+        invalidateSelf()
+    }
+
+    @Deprecated("Deprecated in Android")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    override fun getIntrinsicWidth(): Int = (64f * density).toInt()
+
+    override fun getIntrinsicHeight(): Int = (40f * density).toInt()
+}
+
+class SpeedAction(context: Context, initialLabel: String) : Action(1234567894) {
+    private val labelDrawable = SpeedLabelDrawable(context, initialLabel)
+
+    init {
+        icon = labelDrawable
+        label1 = "Speed"
+    }
+
+    fun setSpeedLabel(label: String) = labelDrawable.setLabel(label)
+}
 
 @SuppressLint("UseCompatLoadingForDrawables")
 class ResizeAction(context: Context?): Action(1234567891) {
@@ -38,7 +103,8 @@ class VideoPlayerGlue(
     context: Context?,
     playerAdapter: LeanbackPlayerAdapter?,
     val showQualityAction: Boolean,
-    private val mActionListener: OnActionClickedListener
+    private val mActionListener: OnActionClickedListener,
+    initialSpeedLabel: String = "1x"
 ) : PlaybackTransportControlGlue<LeanbackPlayerAdapter?>(context, playerAdapter) {
     /** Listens for when skip to next and previous actions have been dispatched.  */
     interface OnActionClickedListener {
@@ -52,6 +118,8 @@ class VideoPlayerGlue(
 
         fun onQuality()
 
+        fun onSpeed()
+
         fun onPlayerPause()
 
     }
@@ -59,6 +127,7 @@ class VideoPlayerGlue(
     //private val mRepeatAction: RepeatAction
     //private val mThumbsUpAction: ThumbsUpAction
     private val qualityAction: QualityAction
+    private val speedAction: SpeedAction
     var shouldShowQualityAction: Boolean = false
     private val resizeAction: ResizeAction
     var shouldShowResizeAction: Boolean = false
@@ -85,6 +154,7 @@ class VideoPlayerGlue(
         adapter.add(resizeAction)
         if(showQualityAction)
             adapter.add(qualityAction)
+        adapter.add(speedAction)
     }
 
     //TODO trying to draw actions only if needed
@@ -117,7 +187,7 @@ class VideoPlayerGlue(
 
     // Should dispatch actions that the super class does not supply callbacks for.
     private fun shouldDispatchAction(action: Action): Boolean {
-        return action === mRewindAction || action === mFastForwardAction || action === mSkip85Action || action === resizeAction || action === qualityAction
+        return action === mRewindAction || action === mFastForwardAction || action === mSkip85Action || action === resizeAction || action === qualityAction || action === speedAction
     }
 
     private fun dispatchAction(action: Action) {
@@ -132,6 +202,8 @@ class VideoPlayerGlue(
             mActionListener.onResize()
         } else if (action === qualityAction) {
             mActionListener.onQuality()
+        } else if (action === speedAction) {
+            mActionListener.onSpeed()
         } else if (action is MultiAction) {
             val multiAction = action
             multiAction.nextIndex()
@@ -144,15 +216,18 @@ class VideoPlayerGlue(
         }
     }
 
-    private fun notifyActionChanged(
-        action: MultiAction, adapter: ArrayObjectAdapter?
-    ) {
+    private fun notifyActionChanged(action: Action, adapter: ArrayObjectAdapter?) {
         if (adapter != null) {
             val index = adapter.indexOf(action)
             if (index >= 0) {
                 adapter.notifyArrayItemRangeChanged(index, 1)
             }
         }
+    }
+
+    fun updateSpeedLabel(label: String) {
+        speedAction.setSpeedLabel(label)
+        notifyActionChanged(speedAction, controlsRow.secondaryActionsAdapter as? ArrayObjectAdapter)
     }
 
     override fun next() {
@@ -200,5 +275,6 @@ class VideoPlayerGlue(
         mRewindAction = RewindAction(context)
         resizeAction = ResizeAction(context)
         qualityAction = QualityAction(context)
+        speedAction = SpeedAction(context!!, initialSpeedLabel)
     }
 }

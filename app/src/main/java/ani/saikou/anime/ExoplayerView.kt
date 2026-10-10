@@ -55,6 +55,7 @@ import ani.saikou.others.ResettableTimer
 import ani.saikou.others.getSerialized
 import ani.saikou.parsers.*
 import ani.saikou.settings.PlayerSettings
+import ani.saikou.settings.migrateCursedSpeedList
 import ani.saikou.settings.PlayerSettingsActivity
 import ani.saikou.settings.UserInterfaceSettings
 import com.bumptech.glide.Glide
@@ -302,6 +303,7 @@ class ExoplayerView : AppCompatActivity(), Player.Listener {
         }
 
         settings = loadData("player_settings") ?: PlayerSettings().apply { saveData("player_settings", this) }
+        if (settings.migrateCursedSpeedList(this)) saveData("player_settings", settings)
         uiSettings = loadData("ui_settings") ?: UserInterfaceSettings().apply { saveData("ui_settings", this) }
 
         playerView = findViewById(R.id.player_view)
@@ -893,12 +895,31 @@ class ExoplayerView : AppCompatActivity(), Player.Listener {
         //Speed
         val speeds =
             if (settings.cursedSpeeds)
-                arrayOf(1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 4f, 5f, 10f, 25f, 50f)
+                PlayerSettings.CURSED_SPEEDS
             else
                 arrayOf(0.25f, 0.33f, 0.5f, 0.66f, 0.75f, 1f, 1.25f, 1.33f, 1.5f, 1.66f, 1.75f, 2f)
 
-        val speedsName = speeds.map { "${it}x" }.toTypedArray()
-        var curSpeed = loadData("${media.id}_speed", this) ?: settings.defaultSpeed
+        val speedsName = if (settings.cursedSpeeds) {
+            PlayerSettings.CURSED_SPEED_LABELS
+        } else {
+            speeds.map { "${it}x" }.toTypedArray()
+        }
+        val defaultSpeedIndex = settings.defaultSpeed.takeIf { it in speeds.indices }
+            ?: speeds.indexOf(1f).coerceAtLeast(0)
+        val speedKey = "${media.id}_speed"
+        val speedVersionKey = "${media.id}_speed_list_version"
+        if (settings.cursedSpeeds && (loadData<Int>(speedVersionKey, this, toast = false) ?: 0) < 1) {
+            val oldCursedSpeeds = arrayOf(1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 4f, 5f, 10f, 25f, 50f)
+            loadData<Int>(speedKey, this, toast = false)?.let { oldIndex ->
+                val oldSpeed = oldCursedSpeeds.getOrNull(oldIndex)
+                val migratedIndex = oldSpeed?.let { PlayerSettings.CURSED_SPEEDS.indexOf(it) }
+                    ?.takeIf { it >= 0 } ?: defaultSpeedIndex
+                saveData(speedKey, migratedIndex, this)
+            }
+            saveData(speedVersionKey, 1, this)
+        }
+        var curSpeed = (loadData<Int>(speedKey, this) ?: defaultSpeedIndex)
+            .takeIf { it in speeds.indices } ?: defaultSpeedIndex
 
         playbackParameters = PlaybackParameters(speeds[curSpeed])
         var speed: Float
@@ -906,7 +927,7 @@ class ExoplayerView : AppCompatActivity(), Player.Listener {
         exoSpeed.setOnClickListener {
             speedDialog.setSingleChoiceItems(speedsName, curSpeed) { dialog, i ->
                 if (isInitialized) {
-                    saveData("${media.id}_speed", i, this)
+                    saveData(speedKey, i, this)
                     speed = speeds[i]
                     curSpeed = i
                     playbackParameters = PlaybackParameters(speed)

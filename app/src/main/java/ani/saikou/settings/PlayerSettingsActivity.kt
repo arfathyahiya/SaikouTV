@@ -54,6 +54,7 @@ class PlayerSettingsActivity : AppCompatActivity() {
         }
 
         val settings = loadData<PlayerSettings>(player, toast = false) ?: PlayerSettings().apply { saveData(player, this) }
+        if (settings.migrateCursedSpeedList(this)) saveData(player, settings)
 
         binding.playerSettingsBack.setOnClickListener {
             onBackPressedDispatcher.onBackPressed()
@@ -79,13 +80,22 @@ class PlayerSettingsActivity : AppCompatActivity() {
 
 
         val speeds = arrayOf(0.25f, 0.33f, 0.5f, 0.66f, 0.75f, 1f, 1.25f, 1.33f, 1.5f, 1.66f, 1.75f, 2f)
-        val cursedSpeeds = arrayOf(1f, 1.25f, 1.5f, 1.75f, 2f, 2.5f, 3f, 4f, 5f, 10f, 25f, 50f)
+        val cursedSpeeds = PlayerSettings.CURSED_SPEEDS
         var curSpeedArr = if (settings.cursedSpeeds) cursedSpeeds else speeds
-        var speedsName = curSpeedArr.map { "${it}x" }.toTypedArray()
-        binding.playerSettingsSpeed.text = getString(R.string.default_playback_speed, speedsName[settings.defaultSpeed])
+        var speedsName = if (settings.cursedSpeeds) {
+            PlayerSettings.CURSED_SPEED_LABELS
+        } else {
+            curSpeedArr.map { "${it}x" }.toTypedArray()
+        }
+        val normalSpeedIndex = speeds.indexOf(1f)
+        val cursedSpeedIndex = cursedSpeeds.indexOf(1f)
+        fun validDefaultSpeedIndex(): Int = settings.defaultSpeed.takeIf { it in curSpeedArr.indices }
+            ?: if (settings.cursedSpeeds) cursedSpeedIndex else normalSpeedIndex
+
+        binding.playerSettingsSpeed.text = getString(R.string.default_playback_speed, speedsName[validDefaultSpeedIndex()])
         val speedDialog = AlertDialog.Builder(this, R.style.DialogTheme).setTitle("Default Speed")
         binding.playerSettingsSpeed.setOnClickListener {
-            speedDialog.setSingleChoiceItems(speedsName, settings.defaultSpeed) { dialog, i ->
+            speedDialog.setSingleChoiceItems(speedsName, validDefaultSpeedIndex()) { dialog, i ->
                 settings.defaultSpeed = i
                 binding.playerSettingsSpeed.text = getString(R.string.default_playback_speed, speedsName[i])
                 saveData(player, settings)
@@ -97,9 +107,13 @@ class PlayerSettingsActivity : AppCompatActivity() {
         binding.playerSettingsCursedSpeeds.setOnCheckedChangeListener { _, isChecked ->
             settings.cursedSpeeds = isChecked
             curSpeedArr = if (settings.cursedSpeeds) cursedSpeeds else speeds
-            settings.defaultSpeed = if (settings.cursedSpeeds) 0 else 5
-            speedsName = curSpeedArr.map { "${it}x" }.toTypedArray()
-            binding.playerSettingsSpeed.text = getString(R.string.default_playback_speed, speedsName[settings.defaultSpeed])
+            speedsName = if (settings.cursedSpeeds) {
+                PlayerSettings.CURSED_SPEED_LABELS
+            } else {
+                curSpeedArr.map { "${it}x" }.toTypedArray()
+            }
+            settings.defaultSpeed = if (settings.cursedSpeeds) cursedSpeedIndex else normalSpeedIndex
+            binding.playerSettingsSpeed.text = getString(R.string.default_playback_speed, speedsName[validDefaultSpeedIndex()])
             saveData(player, settings)
         }
 
